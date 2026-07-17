@@ -77,3 +77,63 @@ export function formatBankAccountNumber(accountNumber: string, bankCode?: string
   }
   return parts.join("-");
 }
+
+/** CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF) as used by the EMV QR Code checksum tag. */
+function crc16(payload: string): string {
+  let crc = 0xffff;
+  for (let i = 0; i < payload.length; i++) {
+    crc ^= payload.charCodeAt(i) << 8;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) !== 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+/** Build an EMV QR Code tag: 2-digit id + 2-digit length + value. */
+function tlv(id: string, value: string): string {
+  return `${id}${value.length.toString().padStart(2, "0")}${value}`;
+}
+
+const PROMPTPAY_AID = "A000000677010111";
+
+/**
+ * Generate a PromptPay QR Code payload string (EMV QR Code format) for the
+ * given target — a 10-digit Thai mobile number or a 13-digit citizen/tax ID.
+ * Pass `amount` to produce a fixed-amount (dynamic) QR; omit it for an
+ * any-amount (static) QR the payer fills in themselves. The returned string
+ * is the raw payload text to encode into a QR code image — this function
+ * does not render an image itself.
+ */
+export function generatePromptPayPayload(target: string, amount?: number): string {
+  const digits = target.replace(/[\s-]/g, "");
+
+  let subTag: string;
+  let subValue: string;
+  if (/^0[689]\d{8}$/.test(digits)) {
+    subTag = "01";
+    subValue = `0066${digits.slice(1)}`;
+  } else if (/^\d{13}$/.test(digits)) {
+    subTag = "02";
+    subValue = digits;
+  } else {
+    throw new Error(`Invalid PromptPay target: expected a 10-digit mobile number or 13-digit ID, got "${target}"`);
+  }
+
+  if (amount !== undefined && (!Number.isFinite(amount) || amount <= 0)) {
+    throw new Error(`Invalid PromptPay amount: ${amount}`);
+  }
+
+  const merchantInfo = tlv("00", PROMPTPAY_AID) + tlv(subTag, subValue);
+
+  let payload =
+    tlv("00", "01") +
+    tlv("01", amount !== undefined ? "12" : "11") +
+    tlv("29", merchantInfo) +
+    tlv("53", "764") +
+    (amount !== undefined ? tlv("54", amount.toFixed(2)) : "") +
+    tlv("58", "TH");
+
+  payload += "6304";
+  return payload + crc16(payload);
+}

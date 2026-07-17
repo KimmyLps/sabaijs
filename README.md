@@ -116,11 +116,17 @@ numberToEnglishWords(8500);  // "Eight Thousand Five Hundred"
 
 ### Bank
 ```ts
-import { THAI_BANKS, findBank, formatBankAccountNumber, isValidBankAccountNumber } from "sabaijs/bank";
+import { THAI_BANKS, findBank, formatBankAccountNumber, isValidBankAccountNumber, generatePromptPayPayload } from "sabaijs/bank";
 
 findBank("004"); // { code: "004", nameTh: "ธนาคารกสิกรไทย", nameEn: "Kasikornbank", ... }
 isValidBankAccountNumber("123-4-56789-0"); // true
 formatBankAccountNumber("1234567890", "004"); // "123-4-56789-0"
+
+// EMV QR Code payload for a PromptPay mobile number or citizen/tax ID.
+// Pass amount for a fixed-amount QR; omit it for an any-amount QR.
+// Feed the returned string into any QR code image library to render it.
+generatePromptPayPayload("0812345678");      // static (any-amount) payload
+generatePromptPayPayload("0812345678", 100); // dynamic payload, fixed at ฿100
 ```
 
 ### Invoice / document numbering
